@@ -6,16 +6,16 @@ import random
 from scipy import spatial
 from scipy.linalg import expm
 from joblib import Parallel, delayed
-
+import multiprocessing
 
 #Conversion Factors and Constants
 amuToKg=  1.66054e-27 
-e = 1.602176634e-19;
-a0 = 5.29177210903e-11;
-Debye = 0.39*e*a0;
-epsilon0 = 8.8541878128e-12;
-hbar = 1.05457182e-34;
-kB = 1.38064852e-23;
+e = 1.602176634e-19
+a0 = 5.29177210903e-11
+Debye = 0.39*e*a0
+epsilon0 = 8.8541878128e-12
+hbar = 1.05457182e-34
+kB = 1.38064852e-23
 
 
 #Atomic/Trap Properties
@@ -33,10 +33,13 @@ def System():
     stateInit = np.array([0, 1]) #Starts at spin down
     
     decay = 0.01 #Not in use yet
-    iters  = 10 #Takes an average over 10 experiments/shots
+    iters  = 100 #Takes an average over 10 experiments/shots
     
     SpinProgression = []
     tarray= np.linspace(0, t, 1000) #Creates time array
+
+    SpinProgression = Parallel(n_jobs=multiprocessing.cpu_count())(delayed(multiProcessIt)(NumOfRb, NumOfKRb, fraction2Ryd, stateInit, tarray, T) for i in range(100))
+    '''
     for i in range(iters):
         RbAtomCoord = generateAtoms(0, NumOfRb, Rb['mass']*Rb['w']**2, kB*T) #Rb coord
         KRbAtomCoord = generateAtoms(0, NumOfKRb, KRb['mass']*KRb['w']**2, kB*T) #Krb Coord
@@ -54,12 +57,28 @@ def System():
         print('Data analysis')
         SpinProgression.append(OverlapSpinUp)  
         #NumOfKRb = int(NumOfKRb*np.exp(-decay))
-    
+    '''
     SpinProgAvg = np.average(SpinProgression, axis=0)
     plt.plot(tarray, SpinProgAvg)
     plt.show()
 
 
+def multiProcessIt(NumOfRb, NumOfKRb, fraction2Ryd, stateInit, tarray, T):
+    RbAtomCoord = generateAtoms(0, NumOfRb, Rb['mass']*Rb['w']**2, kB*T) #Rb coord
+    KRbAtomCoord = generateAtoms(0, NumOfKRb, KRb['mass']*KRb['w']**2, kB*T) #Krb Coord
+
+    print("Exciting to Ryd")
+    RydCoord, NonRyd = exciteRydberg(RbAtomCoord, fraction2Ryd) #Returns the coordinates of the Rydberg atoms
+    print("Finding Closest Neighbors")
+    costNeigh = findNearestNeighbor(RydCoord, KRbAtomCoord) #Finds closest KRb neighbor for each rydber atom
+    print(f"Num Of Ryd: {np.shape(RydCoord)[1]}, Distance = {costNeigh[:]} ")
+
+    print("Calculating Hamiltonian")
+    HamiltonianArray = getInteractionStrength(costNeigh) #For each distance, calculates the rydberg interaction Hamiltonian 
+    print('Evolving under the hamiltonian')
+    stateFinalArray, OverlapSpinUp = TimeEvolve(stateInit, HamiltonianArray, tarray) #Evolves state under this hamiltonian
+    print('Data analysis')
+    return OverlapSpinUp
 
 #Generates the coordinates of a given atom number basesd on the spacial density
 def generateAtoms(mu, AtomNum, TrapFreq, KbT):

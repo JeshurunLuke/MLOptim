@@ -38,7 +38,7 @@ def System():
     SpinProgression = []
     tarray= np.linspace(0, t, 1000) #Creates time array
 
-    SpinProgression = Parallel(n_jobs=multiprocessing.cpu_count())(delayed(multiProcessIt)(NumOfRb, NumOfKRb, fraction2Ryd, stateInit, tarray, T) for i in range(100))
+    SpinProgression = Parallel(n_jobs=multiprocessing.cpu_count())(delayed(multiProcessIt)(NumOfRb, NumOfKRb, fraction2Ryd, stateInit, tarray, T) for i in range(iters))
     '''
     for i in range(iters):
         RbAtomCoord = generateAtoms(0, NumOfRb, Rb['mass']*Rb['w']**2, kB*T) #Rb coord
@@ -59,10 +59,23 @@ def System():
         #NumOfKRb = int(NumOfKRb*np.exp(-decay))
     '''
     SpinProgAvg = np.average(SpinProgression, axis=0)
+    plt.title('Rydberg Dynamics')
     plt.plot(tarray, SpinProgAvg)
+    plt.xlabel('Time (us)')
+    plt.ylabel('Fraction of |1, 0> of Interacting KRb Atoms')
     plt.show()
 
+    plt.title('Rydberg Dynamics')
+    plt.plot(tarray, SpinProgAvg*(fraction2Ryd*NumOfRb))
+    plt.xlabel('Time (us)')
+    plt.ylabel('Atom Count of |1, 0> Overall States')
+    plt.show()
 
+    plt.title('Rydberg Dynamics')
+    plt.plot(tarray, SpinProgAvg*(fraction2Ryd*NumOfRb/(NumOfKRb)))
+    plt.xlabel('Time (us)')
+    plt.ylabel('Fraciton of |1, 0> Overall States')
+    plt.show()
 def multiProcessIt(NumOfRb, NumOfKRb, fraction2Ryd, stateInit, tarray, T):
     RbAtomCoord = generateAtoms(0, NumOfRb, Rb['mass']*Rb['w']**2, kB*T) #Rb coord
     KRbAtomCoord = generateAtoms(0, NumOfKRb, KRb['mass']*KRb['w']**2, kB*T) #Krb Coord
@@ -94,15 +107,17 @@ def generateAtoms(mu, AtomNum, TrapFreq, KbT):
 def TimeEvolve(stateInit,HamiltonianArray, trange):
     stateFinalArray = []
     OverlapSpinUp = []
+    tstart = np.random.rand(len(HamiltonianArray))*2
     for ind, t in enumerate(trange): #calculates the hamiltonian/Frac at Spin Up for each time step
-        print(f'{ind/len(trange)*100}', end='\r')
+        print(f'{round(ind/len(trange)*100, 2)}', end='\r')
         FinalState = np.array(stateInit, dtype = complex)
         Overlap = 0
-        for H in HamiltonianArray:
-            TimeMat = expm(-1j*H*t)
-            FinalState = np.matmul(TimeMat, stateInit) 
-            FinalState = FinalState/np.linalg.norm(FinalState)
-            Overlap += np.abs(FinalState[0])**2
+        for i, H in enumerate(HamiltonianArray):
+            if tstart[i] < t: 
+                TimeMat = expm(-1j*H*t)
+                FinalState = np.matmul(TimeMat, stateInit) 
+                FinalState = FinalState/np.linalg.norm(FinalState)
+                Overlap += np.abs(FinalState[0])**2
 
         stateFinalArray.append(FinalState)
         OverlapSpinUp.append(Overlap/len(HamiltonianArray)) #OverlapSpinUp for each t
@@ -142,35 +157,24 @@ def findNearestNeighbor(RydCoord, KRbCoord):
     RydCoord = np.transpose(RydCoord)
     tree = spatial.KDTree(KRbCoord)
     closestNeighborList = []
+    rcut = 1E-6
     for atom in RydCoord: 
         dist2Krb, indOfKRb = tree.query(atom)
+        while dist2Krb < rcut:
+
+            KRbCoord = np.delete(KRbCoord, indOfKRb, 0)
+            tree = spatial.KDTree(KRbCoord)
+            dist2Krb, indOfKRb = tree.query(atom)
+
 
         closestNeighborList.append([dist2Krb, indOfKRb])
     return closestNeighborList
     
 #Plots Distributinon
+
 def distribution3D(ax, AtomCoord):
 
     ax.scatter(AtomCoord[0], AtomCoord[1], AtomCoord[2])
     
 
 System()
-
-    
-    
-    
-'''
-ax = gen3D()
-ax.set_title('Potassium and Rubidium Atom')
-distribution3D(ax, RbAtomCoord)
-distribution3D(ax, KRbAtomCoord)
-plt.show()
-'''
-'''
-
-ax = gen3D()
-ax.set_title(' Rubidium and Rydberg')
-distribution3D(ax, NewAtomCoord)
-distribution3D(ax, RydCoord)
-plt.show()
-'''
